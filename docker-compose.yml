@@ -1,0 +1,26 @@
+services:
+  # local BOT API server
+  telegram-bot-api:
+    image: aiogram/telegram-bot-api:latest
+    container_name: tg_bot_api_server
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
+    volumes:
+      - tg_bot_api_data:/var/lib/telegram-bot-api
+    restart: always
+
+  # bot himself
+  bot:
+    build: .
+    container_name: tg_bot_app
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - LOCAL_SERVER_URL=${LOCAL_SERVER_URL}
+      - BOT_API_URL=${BOT_API_URL}
+    depends_on:
+      - telegram-bot-api
+    restart: always
+
+volumes:
+  tg_bot_api_data:
