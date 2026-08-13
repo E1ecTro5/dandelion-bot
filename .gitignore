@@ -419,3 +419,4 @@ bin/
 obj/
 .venv
 docker-compose.yml
+cookies.txt

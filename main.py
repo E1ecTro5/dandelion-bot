@@ -3,15 +3,17 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
-from aiogram.types import Message
+from aiogram.types import Message, FSInputFile
 from aiogram.filters import Command
 import os
 from dotenv import load_dotenv
 
+import media_installer
+
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-LOCAL_SERVER_URL = os.getenv("LOCAL_SERVER_URL")
+LOCAL_SERVER_URL = os.getenv("LOCAL_SERVER_URL", "http://localhost:8081")
 
 logging.basicConfig(level=logging.INFO)
 
@@ -26,6 +28,34 @@ async def main():
     @dp.message(Command("start"))
     async def cmd_start(message: Message):
         await message.answer("HI THERE!")
+
+    @dp.message(Command("dlp"))
+    async def handle_dlp(message: Message):
+        args = message.text.split(maxsplit=1)
+        if len(args) < 2:
+            await message.answer("Please pass a link: `/dlp <link>`")
+            return
+
+        url = args[1]
+        status_msg = await message.answer("Downloading...")
+
+        try:
+            file_path = await media_installer.download_audio(url)
+
+            audio_file = FSInputFile(file_path)
+            await message.answer_audio(audio_file)
+
+            # here we can put the file configurator methods in future
+
+            # deleting after sending
+            if os.path.exists(file_path):
+                os.remove(file_path)
+
+        except Exception as e:
+            logging.error(f"Error during download: {e}")
+            await message.answer("Error during download.")
+        finally:
+            await status_msg.delete()
 
     # Message Text handler
     @dp.message(lambda msg: msg.text is not None)

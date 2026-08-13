@@ -18,6 +18,10 @@ services:
       - BOT_TOKEN=${BOT_TOKEN}
       - LOCAL_SERVER_URL=${LOCAL_SERVER_URL}
       - BOT_API_URL=${BOT_API_URL}
+    volumes:
+      # common folder
+      - tg_bot_api_data:/var/lib/telegram-bot-api
+      - ./cookies.txt:/app/cookies.txt
     depends_on:
       - telegram-bot-api
     restart: always
