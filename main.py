@@ -40,9 +40,11 @@ async def main():
         status_msg = await message.answer("Downloading...")
 
         try:
-            file_path = await media_installer.download_audio(url)
+            media_info = await media_installer.download_audio(url)
+            file_path = media_info.get("file_path")
 
             audio_file = FSInputFile(file_path)
+            await message.answer(f"Found: {media_info.get('title')} by {media_info.get('artist')}")
             await message.answer_audio(audio_file)
 
             # here we can put the file configurator methods in future
