@@ -74,7 +74,15 @@ async def main():
                 disk_position = tags.get("track_number", "1")
                 basic_position = tags.get("position", "")
 
-                await message.answer(
+                album_cover = None
+
+                try:
+                    album_cover = await audio_configurator.get_cover_from_itunes(artist_title, album_title)
+                except Exception as e:
+                    logging.warning(f"Failed to send photo from URL ({e}), falling back to text.")
+                    await message.answer(e)
+
+                caption_text = (
                     f"Album: {album_title}\n"
                     f"Track: {track_title}\n"
                     f"Artist: {artist_title}\n"
@@ -84,6 +92,18 @@ async def main():
                     f"Disk position: {disk_position}\n"
                     f"Basic position: {basic_position}"
                 )
+
+                if album_cover:
+                    try:
+                        await message.answer_photo(
+                            photo=album_cover,
+                            caption=caption_text
+                        )
+                    except Exception as e:
+                        logging.warning(f"Failed to send photo from URL ({e}), falling back to text.")
+                        await message.answer(caption_text)
+                else:
+                    await message.answer(caption_text)
             else:
                 await message.answer("Tags in Discogs has not been found...")
 

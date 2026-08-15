@@ -2,7 +2,7 @@ import asyncio
 import os
 import discogs_client
 import re
-
+import aiohttp
 import unicodedata
 from dotenv import load_dotenv
 
@@ -33,6 +33,8 @@ def search_track_via_master(artist: str, track_title: str) -> dict | None:
 
         release = getattr(master, 'main_release', None)
 
+        album_name = getattr(master, 'title', '')
+
         source_obj = release if release else master
 
         m_genres = getattr(master, 'genres', []) or []
@@ -62,7 +64,7 @@ def search_track_via_master(artist: str, track_title: str) -> dict | None:
         disc_number, track_number = parse_position(position)
 
         return {
-            "album": getattr(master, 'title', ''),
+            "album": album_name,
             "artist": artist,
             "title": found_title,
             "year": str(year) if year else "",
@@ -113,6 +115,32 @@ def normalize_string(text: str) -> str:
     text = re.sub(r'\s+', ' ', text).strip()
 
     return text
+
+# maybe move to another file in future
+async def get_cover_from_itunes(artist: str, album: str) -> str | None:
+    url = "https://itunes.apple.com/search"
+    params = {
+        "term": f"{artist} {album}",
+        "entity": "album",
+        "limit": 1
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as resp:
+                if resp.status == 200:
+                    # parsing json the right way
+                    data = await resp.json(content_type=None)
+                    results = data.get("results")
+
+                    if results:
+                        raw_cover = results[0].get("artworkUrl100")
+                        if raw_cover:
+                            return raw_cover.replace("100x100bb", "1000x1000bb")
+    except Exception as e:
+        raise e
+
+    return None
 
 async def setup_tags(artist_name, title_name):
     return await asyncio.to_thread(search_track_via_master, artist_name, title_name)  # launching in a different thread
