@@ -7,7 +7,7 @@ import yt_dlp
 def _download_sync(url: str) -> dict[str, str | None | Any]:
     ydl_opts = {
         'format': 'bestaudio/best',
-        'outtmpl': '%(artist, uploader)s - %(title)s.%(ext)s',
+        'outtmpl': '%(uploader)s - %(title)s.%(ext)s',
 
         # using our own cookies
         'cookiefile': '/app/cookies.txt', # located near the main/docker files
@@ -29,24 +29,26 @@ def _download_sync(url: str) -> dict[str, str | None | Any]:
         mp3_filename = ydl.prepare_filename(info) # getting filename after post-processing
         mp3_filename = mp3_filename.rsplit('.', 1)[0] + '.mp3'
 
-        # mp3_filename = clean_string(mp3_filename)
-
-        title = info.get('title')
+        title = info.get('title') or mp3_filename
         artist = info.get('artist') or info.get('uploader') or info.get('channel') or "Unknown"
+        # album = info.get('album') or "" # maybe in future if needed?
 
-        title = delete_artst_from_title(title)
+        if title.__contains__(' - '):
+            artist, title = get_strings_from_title(artist, title)
+
         title = clean_string(title)
 
         return {
             "file_path": mp3_filename,
             "title": title,
-            "artist": artist
+            "artist": artist,
+            # "album": album
         }
 
-def delete_artst_from_title(title: str) -> str:
-    contains = title.__contains__(' - ')
-    if contains: title = title[(title.index(' - ')) + 3:]
-    return title
+def get_strings_from_title(artist:str, title: str) -> tuple[str, str]:
+    artist = title[:title.index(' - ')]
+    title = title[(title.index(' - ')) + 3:]
+    return artist, title
 
 def clean_string(string: str) -> str:
     if not string: return ""

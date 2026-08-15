@@ -2,6 +2,8 @@ import asyncio
 import os
 import discogs_client
 import re
+
+import unicodedata
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -11,11 +13,17 @@ d = discogs_client.Client('MyTelegramMusicBot/0.6', user_token=DISCOGS_TOKEN)
 
 def search_track_via_master(artist: str, track_title: str) -> dict | None:
     try:
-        results = d.search(
-            track=track_title,
-            artist=artist,
-            type='master'
-        )
+        results = d.search(track=track_title, artist=artist, type='master')
+
+        if not results:
+            clean_artist = normalize_string(artist)
+            clean_title = normalize_string(track_title)
+
+            if clean_artist != artist or clean_title != track_title:
+                results = d.search(track=clean_title, artist=clean_artist, type='master')
+
+            if not results:
+                raise Exception(f"Nothing found in Discogs for: {artist}/{clean_artist} - {track_title}/{clean_title}")
 
         if not results:
             raise Exception("Search didn't go as planned..")
@@ -65,9 +73,7 @@ def search_track_via_master(artist: str, track_title: str) -> dict | None:
         }
 
     except Exception as e:
-        print(f"Error during search in Discogs: {e}")
-        return None
-
+        raise e
 
 def parse_position(position: str) -> tuple[str, str]:
     if not position:
@@ -91,6 +97,22 @@ def parse_position(position: str) -> tuple[str, str]:
     # just a num
     clean_num = re.sub(r'\D', '', position)
     return "1", clean_num or position
+
+def normalize_string(text: str) -> str:
+    if not text: return ""
+
+    # replace to empties
+    text = re.sub(r"['’‘`\"“”]", "", text)
+
+    # need for standardization
+    text = ''.join(
+        c for c in unicodedata.normalize('NFKD', text)
+        if unicodedata.category(c) != 'Mn'
+    )
+
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    return text
 
 async def setup_tags(artist_name, title_name):
     return await asyncio.to_thread(search_track_via_master, artist_name, title_name)  # launching in a different thread

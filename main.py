@@ -57,6 +57,8 @@ async def main():
             artist_name = media_info.get('artist')
             await message.answer(f"Found: {track_name} by {artist_name}")
 
+            tags = None
+
             try:
                 tags = await audio_configurator.setup_tags(artist_name, track_name)
             except Exception as e:
@@ -93,7 +95,7 @@ async def main():
 
         except Exception as e:
             logging.error(f"Error during download: {e}")
-            await message.answer("Error during download.")
+            await message.answer(f"Error during download: {e}")
         finally:
             await status_msg.delete()
 
