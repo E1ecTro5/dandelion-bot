@@ -4,6 +4,7 @@ import discogs_client
 import re
 import aiohttp
 import unicodedata
+import roman
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -95,6 +96,12 @@ def parse_position(position: str) -> tuple[str, str]:
         side_code = ord(side.upper()) - ord('A')
         disc_num = str((side_code // 2) + 1)
         return disc_num, track_num
+
+    try:
+        num = roman.fromRoman(position)
+        return "1", str(num)
+    except roman.InvalidRomanNumeralError:
+        num = 1
 
     # just a num
     clean_num = re.sub(r'\D', '', position)
