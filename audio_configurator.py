@@ -33,8 +33,20 @@ def search_track_via_master(artist: str, track_title: str) -> dict | None:
         master = d.master(master_summary.id)
 
         release = getattr(master, 'main_release', None)
-
         album_name = getattr(master, 'title', '')
+
+        album_artist = artist
+        raw_artists = getattr(master, 'artists', None) or (getattr(release, 'artists', None) if release else None)
+        if raw_artists and len(raw_artists) > 0:
+            # first main artist
+            first_artist = raw_artists[0]
+            # if Discogs Artist object then get the .name
+            name_str = getattr(first_artist, 'name', '') or (
+                first_artist.get('name') if isinstance(first_artist, dict) else str(first_artist))
+
+            if name_str:
+                # delete suffixes
+                album_artist = re.sub(r'\s*\(\d+\)$', '', name_str).strip()
 
         source_obj = release if release else master
 
@@ -52,22 +64,87 @@ def search_track_via_master(artist: str, track_title: str) -> dict | None:
         matched_track = None
 
         if tracklist:
+            target_clean = normalize_string(track_title).lower()
+
             for track in tracklist:
-                if track_title.lower() in track.title.lower():
+                track_clean = normalize_string(track.title).lower()
+                if target_clean in track_clean or track_clean in target_clean:
                     matched_track = track
                     break
+
             if not matched_track:
                 matched_track = tracklist[0]
 
         position = matched_track.position if matched_track else "1"
         found_title = matched_track.title if matched_track else track_title
 
+        # artists for current track
+        track_artists_raw = getattr(matched_track, 'artists', None) if matched_track else None
+        extra_artists_raw = getattr(matched_track, 'extraartists', None) if matched_track else None
+
+        target_artists = track_artists_raw if track_artists_raw else raw_artists
+
+        track_artists_list = []
+        artists_with_joins = []
+
+        if target_artists:
+            for a in target_artists:
+                name = getattr(a, 'name', '') or (a.get('name') if isinstance(a, dict) else str(a))
+                if not name:
+                    continue
+
+                clean_name = re.sub(r'\s*\(\d+\)$', '', name).strip()
+                if not clean_name:
+                    continue
+
+                track_artists_list.append(clean_name)
+
+                raw_join = getattr(a, 'join', '') or (a.get('join') if isinstance(a, dict) else '')
+                artists_with_joins.append((clean_name, raw_join.strip()))
+
+        artist_str = ""
+        num_artists = len(artists_with_joins)
+
+        if num_artists > 0:
+            for i, (name, join_str) in enumerate(artists_with_joins):
+                if i == 0:
+                    artist_str = name
+                else:
+                    prev_join = artists_with_joins[i - 1][1]
+
+                    # if Discogs has "join" (feat., vs., &)
+                    if prev_join: artist_str += f" {prev_join} {name}"
+                    # if last artist in the list
+                    elif i == num_artists - 1: artist_str += f" & {name}"
+                    # other cases
+                    else: artist_str += f", {name}"
+
+        if not artist_str:
+            artist_str = album_artist
+
+        if extra_artists_raw:
+            feat_artists = []
+            for ea in extra_artists_raw:
+                role = getattr(ea, 'role', '') or (ea.get('role') if isinstance(ea, dict) else '')
+                if 'feat' in role.lower() or 'guest' in role.lower():
+                    ea_name = getattr(ea, 'name', '') or (ea.get('name') if isinstance(ea, dict) else str(ea))
+                    clean_ea_name = re.sub(r'\s*\(\d+\)$', '', ea_name).strip()
+                    if clean_ea_name and clean_ea_name not in track_artists_list:
+                        feat_artists.append(clean_ea_name)
+                        track_artists_list.append(clean_ea_name)
+
+            if feat_artists:
+                artist_str += f" feat. {', '.join(feat_artists)}"
+
+        artist_str = re.sub(r'\s+', ' ', artist_str).strip()
+
         disc_number, track_number = parse_position(position)
 
         return {
             "album": album_name,
-            "artist": artist,
+            "album_artist": album_artist,
             "title": found_title,
+            "artists": artist_str,
             "year": str(year) if year else "",
             "genres": all_genres,
             "disc_number": disc_number,

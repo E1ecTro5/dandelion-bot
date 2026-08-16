@@ -56,11 +56,14 @@ def clean_string(string: str) -> str:
     trash_patterns = [
         r"NA\s*-\s*",
         r"\(Audio\)",
+        r"\(Bonus\)",
+        r"\(Bonus Track\)",
         r"\(Official Video\)",
         r"\(Official Audio\)",
         r"\[Official Video\]",
         r"\(Lyric Video\)",
         r"\(Lyrics\)",
+        r"\(Live\)",
         r"\(Offical Visualizer\)"
         r"\(Visualizer\)",
         r"HD",
