@@ -5,7 +5,11 @@ import re
 import aiohttp
 import unicodedata
 import roman
+import mutagen
 from dotenv import load_dotenv
+from mutagen.id3 import ID3, TIT2, TPE1, TPE2, TALB, TDRC, TYER, TCON, TPOS, TRCK, APIC, ID3NoHeaderError
+from mutagen.flac import FLAC, Picture
+from mutagen.mp4 import MP4, MP4Cover
 
 load_dotenv()
 
@@ -225,6 +229,91 @@ async def get_cover_from_itunes(artist: str, album: str) -> str | None:
         raise e
 
     return None
+
+async def apply_tags(file_path: str, tags: dict, cover_url: str | None = None) -> None:
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
+
+    cover_bytes = None
+    if cover_url:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(cover_url) as resp:
+                    if resp.status == 200:
+                        cover_bytes = await resp.read()
+        except Exception as e:
+            print(f"Error getting the cover: {e}")
+
+    def _write_tags():
+        audio_type = mutagen.File(file_path)
+        if audio_type is None:
+            raise ValueError("Audio file type is not supported!")
+
+        ext = os.path.splitext(file_path)[1].lower()
+
+        # format the year
+        raw_year = str(tags.get("year", "")).strip()
+        year_str = re.sub(r'\D', '', raw_year)[:4] if raw_year else ""
+
+        # for .mp3
+        if ext == '.mp3':
+            try:
+                audio = ID3(file_path)
+            except ID3NoHeaderError:
+                audio = ID3()
+
+            audio.add(TIT2(encoding=3, text=tags.get("title", "")))
+            audio.add(TPE1(encoding=3, text=tags.get("artists", "")))
+            audio.add(TPE2(encoding=3, text=tags.get("album_artist", "")))
+            audio.add(TALB(encoding=3, text=tags.get("album", "")))
+
+            if year_str:
+                audio.add(TDRC(encoding=3, text=year_str))
+                audio.add(TYER(encoding=3, text=year_str))
+
+            if tags.get("genres"):
+                audio.add(TCON(encoding=3, text=", ".join(tags["genres"])))
+            if tags.get("disc_number"):
+                audio.add(TPOS(encoding=3, text=str(tags["disc_number"])))
+            if tags.get("track_number"):
+                audio.add(TRCK(encoding=3, text=str(tags["track_number"])))
+
+            if cover_bytes:
+                audio.add(APIC(
+                    encoding=3,
+                    mime='image/jpeg',
+                    type=3,
+                    desc='Cover',
+                    data=cover_bytes
+                ))
+            audio.save(file_path, v2_version=3)
+
+        # .flac
+        elif ext == '.flac':
+            audio = FLAC(file_path)
+            audio["title"] = tags.get("title", "")
+            audio["artist"] = tags.get("artists", "")
+            audio["album"] = tags.get("album", "")
+            audio["albumartist"] = tags.get("album_artist", "")
+            if year_str:
+                audio["date"] = year_str
+            if tags.get("genres"):
+                audio["genre"] = tags["genres"]
+            if tags.get("disc_number"):
+                audio["discnumber"] = str(tags["disc_number"])
+            if tags.get("track_number"):
+                audio["tracknumber"] = str(tags["track_number"])
+
+            if cover_bytes:
+                image = Picture()
+                image.type = 3
+                image.mime = "image/jpeg"
+                image.data = cover_bytes
+                audio.clear_pictures()
+                audio.add_picture(image)
+            audio.save()
+
+    await asyncio.to_thread(_write_tags)
 
 async def setup_tags(artist_name, title_name):
     return await asyncio.to_thread(search_track_via_master, artist_name, title_name)  # launching in a different thread
