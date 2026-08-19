@@ -6,8 +6,6 @@ import command_handler
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
-from aiogram.types import Message
-from aiogram.filters import Command
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -24,20 +22,8 @@ async def main():
     bot = Bot(token=BOT_TOKEN, session=session)
     dp = Dispatcher()
 
-    # /start handler
-    @dp.message(Command("start"))
-    async def cmd_start(message: Message):
-        await command_handler.cmd_start(message)
-
-    # /dlp <link>
-    @dp.message(Command("dlp"))
-    async def handle_dlp(message: Message):
-        await command_handler.dlp_handler(message)
-
-    # Message Text handler
-    @dp.message(lambda msg: msg.text is not None)
-    async def handle_message(message: Message):
-        await command_handler.text_handler(message)
+    # includes /start, /dlp and text echo for now
+    dp.include_router(command_handler.router)
 
     print("Starting the bot...")
 

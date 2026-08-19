@@ -1,16 +1,27 @@
 import os
 import audio_configurator
 import media_installer
+import uuid
+from aiogram import Router, F
+from aiogram.types import Message, CallbackQuery, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.filters import Command
+from aiogram.filters.callback_data import CallbackData
 
-from aiogram.types import Message, FSInputFile
+# create router to pass in the main.py
+router = Router()
 
+# temp storage
+PENDING_DOWNLOADS = {}
+
+class ConfirmAction(CallbackData, prefix="confirm_dl"):
+    action: str # action type
+    download_id: str
+
+@router.message(Command("start"))
 async def cmd_start(message: Message):
     await message.answer("Welcome!")
 
-async def text_handler(message: Message):
-    doc = message.text
-    await message.answer(f"Text: {doc}")
-
+@router.message(Command("dlp"))
 async def dlp_handler(message: Message):
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
@@ -75,26 +86,94 @@ async def dlp_handler(message: Message):
                 f"Basic position: {basic_position}"
             )
 
+            # unique download id
+            download_id = str(uuid.uuid4())[:8]
+            PENDING_DOWNLOADS[download_id] = {
+                "file_path": file_path,
+                "tags": tags,
+                "cover_url": album_cover
+            }
+
+            # inline keyboard
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="Apply tags",
+                        callback_data=ConfirmAction(action="apply", download_id=download_id).pack()
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="Skip",
+                        callback_data=ConfirmAction(action="skip", download_id=download_id).pack()
+                    ),
+                    InlineKeyboardButton(
+                        text="Cancel",
+                        callback_data=ConfirmAction(action="cancel", download_id=download_id).pack()
+                    )
+                ]
+            ])
+
             if album_cover:
                 try:
                     await message.answer_photo(
                         photo=album_cover,
-                        caption=caption_text
+                        caption=caption_text,
+                        reply_markup=keyboard
                     )
                 except Exception as e:
-                    await message.answer(caption_text)
+                    await message.answer(caption_text, reply_markup=keyboard)
             else:
-                await message.answer(caption_text)
-        else:
-            await message.answer("Tags in Discogs has not been found...")
-
-        await message.answer_audio(audio_file)
-
-        # deleting after sending
-        if os.path.exists(file_path):
-            os.remove(file_path)
+                await message.answer(caption_text, reply_markup=keyboard)
+        # else:
+        #     await message.answer("Tags in Discogs has not been found...")
 
     except Exception as e:
         await message.answer(f"Error during download: {e}")
     finally:
         await status_msg.delete()
+
+@router.callback_query(ConfirmAction.filter())
+async def process_confirm_callback(query: CallbackQuery, callback_data: ConfirmAction):
+    await query.answer()
+
+    download_id = callback_data.download_id
+    data = PENDING_DOWNLOADS.pop(download_id, None)
+
+    if not data:
+        await query.message.answer("Download session is outdated or file has not been found.")
+        return
+
+    file_path = data["file_path"]
+    tags = data["tags"]
+    cover_url = data["cover_url"]
+
+    if callback_data.action == "cancel":
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+        await query.message.delete()
+        await query.message.answer("Download cancelled.")
+        return
+
+    if callback_data.action == "apply" and tags:
+        await query.message.edit_caption(caption=f"{query.message.caption}\n\nApplying tags..")
+        try:
+            await audio_configurator.apply_tags(file_path, tags, cover_url)
+        except Exception as e:
+            await query.message.answer(f"Error while applying tags: {e}")
+    else:
+        await query.message.edit_caption(caption=f"{query.message.caption}\n\nSkipped.")
+
+    if os.path.exists(file_path):
+        audio_file = FSInputFile(file_path)
+        await query.message.answer_audio(audio_file)
+        os.remove(file_path)
+    else:
+        await query.message.answer("File has not been found on server.")
+
+# just for test ; will delete soon
+@router.message(F.text)
+async def text_handler(message: Message):
+    doc = message.text
+    await message.answer(f"Text: {doc}")
