@@ -18,50 +18,78 @@ d = discogs_client.Client('MyTelegramMusicBot/0.6', user_token=DISCOGS_TOKEN)
 
 def search_track_via_master(artist: str, track_title: str) -> dict | None:
     try:
-        results = d.search(track=track_title, artist=artist, type='master')
+        clean_artist = normalize_string(artist)
+        clean_title = normalize_string(track_title)
 
-        if not results:
-            clean_artist = normalize_string(artist)
-            clean_title = normalize_string(track_title)
+        queries = [(artist, track_title)]
+        if (clean_artist, clean_title) != (artist, track_title):
+            queries.append((clean_artist, clean_title))
 
-            if clean_artist != artist or clean_title != track_title:
-                results = d.search(track=clean_title, artist=clean_artist, type='master')
+        first_match = None
 
-            if not results:
-                raise Exception(f"Nothing found in Discogs for: {artist}/{clean_artist} - {track_title}/{clean_title}")
+        # search in master releases
+        for a, t in queries:
+            res = d.search(track=t, artist=a, type='master')
+            if res:
+                first_match = res[0]
+                break
 
-        if not results:
-            raise Exception("Search didn't go as planned..")
+        # search in singles, digital releases
+        if not first_match:
+            for a, t in queries:
+                res = d.search(track=t, artist=a, type='release')
+                if res:
+                    first_match = res[0]
+                    break
 
-        master_summary = results[0]
-        master = d.master(master_summary.id)
+        # common search
+        if not first_match:
+            for a, t in queries:
+                res = d.search(track=t, artist=a)
+                if res:
+                    first_match = res[0]
+                    break
 
-        release = getattr(master, 'main_release', None)
-        album_name = getattr(master, 'title', '')
+        if not first_match:
+            raise Exception(f"Nothing found in Discogs for: {artist} - {track_title}")
 
+        if isinstance(first_match, discogs_client.Master):
+            master = first_match
+            release = getattr(master, 'main_release', None)
+            album_name = getattr(master, 'title', '')
+        else:
+            release = first_match
+            master = getattr(release, 'master', None)
+            album_name = getattr(release, 'title', '')
+
+        # metadata source
+        source_obj = release if release else master
         album_artist = artist
-        raw_artists = getattr(master, 'artists', None) or (getattr(release, 'artists', None) if release else None)
-        if raw_artists and len(raw_artists) > 0:
-            # first main artist
-            first_artist = raw_artists[0]
-            # if Discogs Artist object then get the .name
-            name_str = getattr(first_artist, 'name', '') or (
-                first_artist.get('name') if isinstance(first_artist, dict) else str(first_artist))
 
+        raw_artists = getattr(source_obj, 'artists', None)
+        if not raw_artists and master:
+            raw_artists = getattr(master, 'artists', None)
+
+        if raw_artists and len(raw_artists) > 0:
+            first_artist = raw_artists[0]
+            name_str = getattr(first_artist, 'name', '') or (
+                first_artist.get('name') if isinstance(first_artist, dict) else str(first_artist)
+            )
             if name_str:
-                # delete suffixes
                 album_artist = re.sub(r'\s*\(\d+\)$', '', name_str).strip()
 
-        source_obj = release if release else master
-
-        m_genres = getattr(master, 'genres', []) or []
-        m_styles = getattr(master, 'styles', []) or []
-        r_genres = getattr(release, 'genres', []) or []
-        r_styles = getattr(release, 'styles', []) or []
+        m_genres = getattr(master, 'genres', []) if master else []
+        m_styles = getattr(master, 'styles', []) if master else []
+        r_genres = getattr(release, 'genres', []) if release else []
+        r_styles = getattr(release, 'styles', []) if release else []
 
         all_genres = list(set(m_genres + m_styles + r_genres + r_styles))
 
-        year = getattr(master, 'year', None) or getattr(release, 'year', '')
+        year = None
+        if master:
+            year = getattr(master, 'year', None)
+        if not year and release:
+            year = getattr(release, 'year', None)
 
         # search for track in the list
         tracklist = getattr(source_obj, 'tracklist', [])
