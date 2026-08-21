@@ -1,10 +1,9 @@
 import asyncio
 import re
-from typing import Any
-
+from Models.file_model import AudioFile
 import yt_dlp
 
-def _download_sync(url: str) -> dict[str, str | None | Any]:
+def _download_file_sync(url: str) -> AudioFile:
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': '%(uploader)s - %(title)s.%(ext)s',
@@ -29,29 +28,25 @@ def _download_sync(url: str) -> dict[str, str | None | Any]:
         mp3_filename = ydl.prepare_filename(info) # getting filename after post-processing
         mp3_filename = mp3_filename.rsplit('.', 1)[0] + '.mp3'
 
-        title = info.get('title') or mp3_filename
-        artist = info.get('artist') or info.get('uploader') or info.get('channel') or "Unknown"
-        # album = info.get('album') or "" # maybe in future if needed?
+        file = AudioFile(
+            file_path = mp3_filename,
+            title = info.get('title'),
+            artist = info.get('artist') or info.get('uploader') or info.get('channel')
+        )
 
-        if title.__contains__(' - '):
-            artist, title = get_strings_from_title(artist, title)
+        return file
 
-        title = clean_string(title)
+def _check_title(file: AudioFile):
+    if ' - ' not in file.title: return
 
-        return {
-            "file_path": mp3_filename,
-            "title": title,
-            "artist": artist,
-            # "album": album
-        }
+    artist, _, title = file.title.partition(' - ') # first ' - ' will split the str
 
-def get_strings_from_title(artist:str, title: str) -> tuple[str, str]:
-    artist = title[:title.index(' - ')]
-    title = title[(title.index(' - ')) + 3:]
-    return artist, title
+    file.artist = artist.strip()
+    file.title = title.strip()
 
-def clean_string(string: str) -> str:
-    if not string: return ""
+def _clean_title(file: AudioFile):
+    title = file.title
+    if not title: return ""
 
     trash_patterns = [
         r"NA\s*-\s*",
@@ -64,17 +59,20 @@ def clean_string(string: str) -> str:
         r"\(Lyric Video\)",
         r"\(Lyrics\)",
         r"\(Live\)",
-        r"\(Offical Visualizer\)"
+        r"\(Offical Visualizer\)",
         r"\(Visualizer\)",
         r"HD",
         r"4K",
     ]
 
     combined_pattern = "|".join(trash_patterns)
-    cleaned = re.sub(combined_pattern, "", string, flags=re.IGNORECASE)
+    cleaned = re.sub(combined_pattern, "", title, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    file.title = cleaned
+    return None
 
-    return cleaned
-
-async def download_audio(url: str) -> str:
-    return await asyncio.to_thread(_download_sync, url) # launching in a different thread
+async def download_audio(url: str) -> AudioFile:
+    file = await asyncio.to_thread(_download_file_sync, url) # launching in a different thread
+    _check_title(file)
+    _clean_title(file)
+    return file

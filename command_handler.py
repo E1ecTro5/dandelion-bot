@@ -32,20 +32,18 @@ async def dlp_handler(message: Message):
     status_msg = await message.answer("Downloading...")
 
     try:
-        media_info = await media_installer.download_audio(url)
-        if not media_info:
+        audio_file = await media_installer.download_audio(url)
+        if not audio_file:
             await message.answer("Couldn't download the file.")
             return
 
-        file_path = media_info.get("file_path")
+        file_path = audio_file.file_path
         if not file_path:
             await message.answer("Couldn't find the file on server.")
             return
 
-        audio_file = FSInputFile(file_path)
-
-        track_name = media_info.get('title')
-        artist_name = str(media_info.get('artist')).split(", ")[0]
+        track_name = audio_file.title
+        artist_name = str(audio_file.artist).split(", ")[0]
         await message.answer(f"Found: {track_name} by {artist_name}")
 
         tags = None
