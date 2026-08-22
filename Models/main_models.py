@@ -1,21 +1,20 @@
-from dataclasses import dataclass, field
-from typing import List, Optional
+from dataclasses import dataclass
 
+# make them all nullable so you can init their properties later in the code
 @dataclass
 class Track:
-    title: str
-    artists: str
-    album_title: str
-    disc: int
-    position: int
-    file_path: str
+    title: str | None = None
+    artists: str | None = None
+    file_path: str | None = None
+    album_title: str | None = None
+    disc: int | None = None
+    position: int | None = None
 
 @dataclass
 class Album:
-    title: str
-    artist: str
-    year: str
-    main_genre: str
-    subgenres: List[str] = field(default_factory=list)
-    cover_url: [Optional[str]] = None
-    total_tracks: int = 0
+    title: str | None = None
+    artist: str | None = None
+    year: str | None = None
+    main_genre: str | None = None
+    cover_url: str | None = None
+    total_tracks: int | None = None
