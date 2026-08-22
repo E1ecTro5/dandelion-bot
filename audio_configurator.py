@@ -417,10 +417,9 @@ def _fetch_full_release(search_result):
 
 def _search_for_tags(file: AudioFile):
     track = Track(title=file.title, artists=file.artist, file_path=file.file_path)
-    first_artist = track.artists.split()[0]
     album = Album()
 
-    first_match = _search_for_track_match(first_artist, track.title)       # first match in search
+    first_match = _search_for_track_match(track.artists, track.title)               # first match in search
     full_obj, master = _fetch_full_release(first_match)
 
     album.title = _set_album_title(full_obj, master)                        # album title
