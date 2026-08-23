@@ -203,12 +203,6 @@ def _search_for_track_match(artist: str | None, track_title: str | None):
 def _set_album_title(full_obj, master) -> str:
     return getattr(full_obj, 'title', '') or getattr(master, 'title', '')
 
-def _clean_artist_name(name_str: str) -> str:
-    if not name_str:
-        return ""
-    # remove suffixes
-    return re.sub(r'\s*\(\d+\)$', '', name_str).strip()
-
 def _set_album_artist(metadata, master) -> str:
     raw_artists = None
     for obj in (metadata, master):
@@ -276,21 +270,18 @@ def _set_track_count(source_obj) -> int:
 
 def _search_for_track(metadata, track_title):
     tracklist = getattr(metadata, 'tracklist', [])
-    matched_track = None
+    if not tracklist: return None
 
-    if tracklist:
-        target_clean = normalize_string(track_title).lower()
+    target_clean = normalize_string(track_title).lower()
 
-        for track in tracklist:
-            track_clean = normalize_string(track.title).lower()
-            if target_clean in track_clean or track_clean in target_clean:
-                matched_track = track
-                break
+    # exact match or substr
+    for track in tracklist:
+        t_title = _get_field(track, 'title', '')
+        track_clean = normalize_string(t_title).lower()
+        if target_clean == track_clean or target_clean in track_clean or track_clean in target_clean: return track
 
-        if not matched_track:
-            matched_track = tracklist[0]
-
-    return matched_track
+    # if not found
+    return tracklist[0]
 
 def _parse_position(position: str):
     if not position: return 1, 1
@@ -356,64 +347,115 @@ def _build_main_artist_string(artists_with_joins: list[tuple[str, str]]) -> str:
 
     return " ".join(result)
 
-def _extract_feat_artists(extra_artists_raw: list | None, existing_artists: list[str]) -> list[str]:
-    if not extra_artists_raw or not isinstance(extra_artists_raw, (list, tuple)): return []
+def _get_field(obj, key: str, default=""):
+    if isinstance(obj, dict): return obj.get(key, default) or default
 
+    # discogs_client.Track objects contains raw data in '.data'
+    data_dict = getattr(obj, 'data', None)
+    if isinstance(data_dict, dict) and key in data_dict:
+        val = data_dict.get(key)
+        if val is not None: return val
+
+    return getattr(obj, key, default) or default
+
+def _clean_artist_name(name_str: str) -> str:
+    if not name_str:
+        return ""
+    # remove discogs suffixes
+    return re.sub(r'\s*\(\d+\)$', '', str(name_str)).strip()
+
+def _extract_all_artists(matched_track, release_obj, default_album_artist: str) -> str:
+    track_artists = _get_field(matched_track, 'artists', None)
+    release_artists = _get_field(release_obj, 'artists', None)
+
+    target_artists = track_artists if (track_artists and len(track_artists) > 0) else release_artists
+
+    main_artists = []
     feat_artists = []
-    for ea in extra_artists_raw:
-        role = getattr(ea, 'role', '') or (ea.get('role') if isinstance(ea, dict) else '')
-        role_str = str(role).lower()
 
-        if 'feat' in role_str or 'guest' in role_str:
-            ea_name = getattr(ea, 'name', '') or (ea.get('name') if isinstance(ea, dict) else str(ea))
-            clean_ea_name = re.sub(r'\s*\(\d+\)$', '', str(ea_name)).strip()
+    # main artists
+    if target_artists and isinstance(target_artists, (list, tuple)):
+        for item in target_artists:
+            name = _clean_artist_name(_get_field(item, 'name'))
+            join = str(_get_field(item, 'join')).strip().lower()
 
-            if clean_ea_name and clean_ea_name not in existing_artists and clean_ea_name not in feat_artists:
-                feat_artists.append(clean_ea_name)
+            if not name: continue
 
-    return feat_artists
+            # check the (feat, ft) join word
+            if any(ft in join for ft in ('feat', 'ft', 'featuring')):
+                if name not in feat_artists: feat_artists.append(name)
+            elif name not in main_artists: main_artists.append(name)
 
-def _set_track_artists(matched_track_data, album_artist: str | None) -> str:
-    track_artists_raw = getattr(matched_track_data, 'artists', None)
-    extra_artists_raw = getattr(matched_track_data, 'extraartists', None)
+    # if none then album_artist
+    if not main_artists and default_album_artist and default_album_artist != "Unknown Artist":
+        main_artists.append(default_album_artist)
 
-    if track_artists_raw and isinstance(track_artists_raw, (list, tuple)): target_artists = list(track_artists_raw)
-    elif album_artist and album_artist != "Unknown Artist": target_artists = [album_artist]
-    else: target_artists = []
+    # parsing extraartists (both track and release)
+    track_extras = _get_field(matched_track, 'extraartists', []) or []
+    release_extras = _get_field(release_obj, 'extraartists', []) or []
+    all_extras = list(track_extras) + list(release_extras)
 
-    track_artists_list, artists_with_joins = _extract_artist_info(target_artists)
+    for item in all_extras:
+        role = str(_get_field(item, 'role')).lower()
+        if any(keyword in role for keyword in ('feat', 'guest', 'featuring')):
+            name = _clean_artist_name(_get_field(item, 'name'))
+            if name and name not in main_artists and name not in feat_artists:
+                feat_artists.append(name)
 
-    artist_str = _build_main_artist_string(artists_with_joins)
-    if not artist_str: artist_str = album_artist if (album_artist and album_artist != "Unknown Artist") else ""
+    # parsing track title if there are any (feat. Artist)
+    track_title = str(_get_field(matched_track, 'title', ''))
+    title_feat_match = re.search(r'[\(\[]\s*(?:feat|ft|featuring)\.?\s+([^\)\]]+)[\)\]]', track_title, re.IGNORECASE)
+    if title_feat_match:
+        raw_feats = title_feat_match.group(1)
+        split_feats = re.split(r'\s*(?:,|&|\band\b)\s*', raw_feats, flags=re.IGNORECASE)
+        for f in split_feats:
+            cleaned = _clean_artist_name(f)
+            if cleaned and cleaned not in main_artists and cleaned not in feat_artists: feat_artists.append(cleaned)
 
-    feat_artists = _extract_feat_artists(extra_artists_raw, existing_artists=track_artists_list)
+    # build str
+    if main_artists:
+        if len(main_artists) == 1: base_str = main_artists[0]
+        elif len(main_artists) == 2: base_str = f"{main_artists[0]} & {main_artists[1]}"
+        else: base_str = ", ".join(main_artists[:-1]) + f" & {main_artists[-1]}"
+    else:
+        base_str = default_album_artist or ""
+
     if feat_artists:
-        if artist_str: artist_str += f" feat. {', '.join(feat_artists)}"
-        else: artist_str = f"feat. {', '.join(feat_artists)}"
+        feat_str = f"feat. {', '.join(feat_artists)}"
+        return f"{base_str} {feat_str}".strip() if base_str else feat_str
 
-    return re.sub(r'\s+', ' ', artist_str).strip() or (album_artist or "Unknown Artist")
+    return base_str or "Unknown Artist"
 
 def _fetch_full_release(search_result):
-    if not search_result:
-        return None, None
+    if not search_result: return None, None
 
-    try:
-        # master release
-        if isinstance(search_result, discogs_client.Master):
-            master = search_result
-            release = getattr(master, 'main_release', None) or master
-            return release, master
+    # master release
+    if isinstance(search_result, discogs_client.Master):
+        master = search_result
+        release = getattr(master, 'main_release', None) or master
+        return release, master
 
-        # specific release
-        if isinstance(search_result, discogs_client.Release):
-            release = search_result
-            master = getattr(release, 'master', None)
-            return release, master
-
-    except Exception as e:
-        print(f"Error resolving full release/master: {e}")
+    # specific release
+    if isinstance(search_result, discogs_client.Release):
+        release = search_result
+        master = getattr(release, 'master', None)
+        return release, master
 
     return search_result, None
+
+def _set_track_artists_and_title(track_data, full_obj, track: Track, album: Album):
+    # take title from Discogs
+    raw_track_title = _get_field(track_data, 'title', track.title)
+
+    # clear title from parentheses like (feat. ...)
+    track.title = re.sub(
+        r'\s*[\(\[]\s*(?:feat|ft|featuring)\.?\s+[^\)\]]+[\)\]]',
+        '',
+        raw_track_title,
+        flags=re.IGNORECASE
+    ).strip()
+
+    track.artists = _extract_all_artists(track_data, full_obj, album.artist)
 
 def _search_for_tags(file: AudioFile):
     track = Track(title=file.title, artists=file.artist, file_path=file.file_path)
@@ -422,17 +464,16 @@ def _search_for_tags(file: AudioFile):
     first_match = _search_for_track_match(track.artists, track.title)               # first match in search
     full_obj, master = _fetch_full_release(first_match)
 
-    album.title = _set_album_title(full_obj, master)                        # album title
-    album.artist = _set_album_artist(full_obj, master)                      # album artist
-    album.main_genre = _set_album_genres(master, full_obj)                  # main genre if possible to obtain
-    album.year = _set_album_year(full_obj, master)                          # year
-    album.total_tracks = _set_track_count(full_obj)                         # tracks count
+    album.title = _set_album_title(full_obj, master)                                # album title
+    album.artist = _set_album_artist(full_obj, master)                              # album artist
+    album.main_genre = _set_album_genres(master, full_obj)                          # main genre if possible to obtain
+    album.year = _set_album_year(full_obj, master)                                  # year
+    album.total_tracks = _set_track_count(full_obj)                                 # tracks count
 
-    matched_track_data = _search_for_track(full_obj, track.title)           # search for track in the list
-    track.title = getattr(matched_track_data, 'title', track.title)         # track title (just in case if the orig one is wrong)
-    track.artists = _set_track_artists(matched_track_data, album.artist)    # artists for a specific track (including ',', '&' and 'feat.')
-    position = getattr(matched_track_data, 'position', '1')                 # pos on disc
-    track.disc, track.position = _parse_position(position)                  # need to parse
+    matched_track_data = _search_for_track(full_obj, track.title)                   # search for track in the list
+    _set_track_artists_and_title(matched_track_data, full_obj, track, album)        # track title and artists ; single void method, I know...
+    position = getattr(matched_track_data, 'position', '1')                         # pos on disc
+    track.disc, track.position = _parse_position(position)                          # need to parse
 
     return track, album
 
