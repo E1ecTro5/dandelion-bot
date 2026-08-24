@@ -233,13 +233,87 @@ def _set_album_genres(master, release):
     all_genres = list(dict.fromkeys(m_genres + r_genres))
     all_styles = list(dict.fromkeys(m_styles + r_styles))
 
-    # first in 'styles' as a main genre if available
-    if all_styles: main_genre = all_styles[0]
-    elif all_genres: main_genre = all_genres[0]
-    else: main_genre = "Unknown"
+    main_genre = _resolve_genre(all_genres, all_styles)
 
     return main_genre
 
+def _resolve_genre(genres: list[str], styles: list[str]) -> str:
+    all_tags_lower = [t.lower() for t in (genres + styles)]
+    primary_genre = genres[0] if genres else "Unknown"
+
+    GENRE_BLACKLIST = {
+        "experimental", "abstract", "ballad", "vocal",
+        "spoken word", "field recording", "lo-fi"
+    }
+
+    # filter the blacklisted ones
+    valid_styles = [s for s in styles if s.lower() not in GENRE_BLACKLIST]
+    first_valid_style = valid_styles[0] if valid_styles else ""
+
+    # soundtracks
+    if any(tag in all_tags_lower for tag in ["soundtrack", "score", "theme"]): return "Soundtrack"
+
+    # hip-hop or rap
+    if "hip hop" in all_tags_lower or "rap" in all_tags_lower: return "Hip-Hop/Rap"
+
+    # priority should be sorted from the most specific to most abstract one
+
+    # pop
+    if "pop" in all_tags_lower:
+        # specific ones
+        POP_PRIORITY = ["city pop", "synth-pop", "synthpop", "electropop", "indie pop"]
+        for pop_style in POP_PRIORITY:
+            for s in valid_styles:
+                if pop_style in s.lower():
+                    return s
+        return "Pop"
+
+    # classical
+    if "classical" in all_tags_lower:
+        CLASSICAL_PRIORITY = ["neoclassical", "modern classical", "contemporary", "minimalism", "chamber"]
+        for c_style in CLASSICAL_PRIORITY:
+            for s in valid_styles:
+                if c_style in s.lower():
+                    return s
+        return "Classical"
+
+    # other subgenres
+    PRIORITY_SUBGENRES = [
+        # for rock and metal
+        "blackgaze",
+        "post-black metal",
+        "post-rock",
+        "post-metal",
+        "shoegaze",
+        "dsbm",
+        "dungeon synth",
+        "thrash metal",
+        "death metal",
+        "doom metal",
+        "stoner rock",
+
+        # for electronic / wave / ambient
+        "synthwave",
+        "darksynth",
+        "vaporwave",
+        "vapourwave",
+        "dark ambient",
+        "ambient",
+        "deep house",
+        "drum n bass",
+        "liquid funk",
+
+        # for jazz / funk / other
+        "jazz-funk",
+        "city pop"
+    ]
+
+    for target in PRIORITY_SUBGENRES:
+        for style in styles:
+            if target in style.lower(): return style
+
+    # default
+    return first_valid_style if first_valid_style else primary_genre
 
 def _set_album_year(metadata, master) -> str:
     # year of master
