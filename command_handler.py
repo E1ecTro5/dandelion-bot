@@ -1,6 +1,5 @@
 import os
-import audio_configurator
-import media_installer
+from Utils import audio_configurator, media_installer
 import uuid
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
@@ -13,7 +12,7 @@ from Models.main_models import Album, Track
 # create router to pass in the main.py
 router = Router()
 
-# temp storage
+# temp storage ; how about you just use Redis in future instead of this?
 PENDING_DOWNLOADS = {}
 
 class ConfirmAction(CallbackData, prefix="confirm_dl"):
@@ -26,51 +25,29 @@ async def cmd_start(message: Message):
 
 @router.message(Command("dlp"))
 async def dlp_handler(message: Message):
-    args = message.text.split(maxsplit=1)
-    if len(args) < 2:
-        await message.answer("Please pass a link: `/dlp <link>`")
-        return
-
-    url = args[1]
-    status_msg = await message.answer("Downloading...")
-
+    status_msg = None
     try:
+        url = await _check_url(message.text)
+        status_msg = await message.answer("Downloading...")
         audio_file = await _get_audio(url)
 
-        track_name: str | None = audio_file.title
-        artist_name: str | None = str(audio_file.artist).split(", ")[0] if audio_file.artist else None
-        file_path: str | None = audio_file.file_path
-
-        await message.answer(f"Downloaded: {track_name} by {artist_name}") # log
+        file = await _track_from_audio(audio_file)
+        await message.answer(f"Downloaded: {file.title} by {file.artists}") # just to log
 
         # tags
-        try:
-            track, album = await audio_configurator.setup_tags(audio_file)
+        try: track, album = await audio_configurator.setup_tags(audio_file)
         except Exception as e:
             await message.answer(f"Tag setup failed: {e}")
-            track = Track(title=track_name, artists=artist_name, file_path=file_path)
+            track = file
             album = Album()
 
         # cover
-        album_cover: str | None = None
-        if album.title and album.artist:
-            try:
-                album_cover = await audio_configurator.get_album_cover(album.title, album.artist)
-            except Exception as e:
-                await message.answer(f"Cover search warning: {e}")
+        try: album_cover = await _set_album_cover(album)
+        except Exception as e:
+            await message.answer(f"Error while getting album cover: {e}")
+            album_cover = None
 
-        caption_text = (
-            f"Album: {album.title or 'N/A'}\n"
-            f"Album Artist: {album.artist or 'N/A'}\n"
-            f"Year: {album.year or 'N/A'}\n"
-            f"Genre: {album.main_genre or 'N/A'}\n"
-            f"Total tracks: {album.total_tracks or 'N/A'}\n\n"
-            
-            f"Track: {track.title or 'N/A'}\n"
-            f"Artists: {track.artists or 'N/A'}\n"
-            f"Disc number: {track.disc or 1}\n"
-            f"Track position: {track.position or 1}/{album.total_tracks or 1}\n"
-        )
+        caption_text = await _generate_caption_text(album, track)
 
         download_id = str(uuid.uuid4())[:8]
         PENDING_DOWNLOADS[download_id] = {
@@ -115,7 +92,7 @@ async def dlp_handler(message: Message):
     except Exception as e:
         await message.answer(f"Error during download: {e}")
     finally:
-        await status_msg.delete()
+        if status_msg: await status_msg.delete()
 
 @router.callback_query(ConfirmAction.filter())
 async def process_confirm_callback(query: CallbackQuery, callback_data: ConfirmAction):
@@ -133,38 +110,45 @@ async def process_confirm_callback(query: CallbackQuery, callback_data: ConfirmA
     album: Album = data["album"]
     cover_url = data["cover_url"]
 
-    if callback_data.action == "cancel":
+    try:
+        if callback_data.action == "cancel":
+            await query.message.delete()
+            await query.message.answer("Download cancelled.")
+            return
+
+        # update msg
+        status_suffix = "\n\nApplying tags..." if callback_data.action == "apply" else "\n\nSkipped."
+        if query.message.photo: await query.message.edit_caption(caption=f"{query.message.caption}{status_suffix}")
+        else: await query.message.edit_text(text=f"{query.message.text}{status_suffix}")
+
+        if callback_data.action == "apply":
+            try: await audio_configurator.apply_tags(file_path, track, album, cover_url)
+            except Exception as e: await query.message.answer(f"Error while applying tags: {e}")
+
+        if os.path.exists(file_path):
+            audio_file = FSInputFile(file_path)
+            await query.message.answer_audio(audio_file)
+            os.remove(file_path)
+        else:
+            await query.message.answer("File has not been found on server.")
+    finally:
         if os.path.exists(file_path):
             os.remove(file_path)
-        await query.message.delete()
-        await query.message.answer("Download cancelled.")
-        return
-
-    # update msg
-    status_suffix = "\n\nApplying tags..." if callback_data.action == "apply" else "\n\nSkipped."
-    if query.message.photo:
-        await query.message.edit_caption(caption=f"{query.message.caption}{status_suffix}")
-    else:
-        await query.message.edit_text(text=f"{query.message.text}{status_suffix}")
-
-    if callback_data.action == "apply":
-        try:
-            await audio_configurator.apply_tags(file_path, track, album, cover_url)
-        except Exception as e:
-            await query.message.answer(f"Error while applying tags: {e}")
-
-    if os.path.exists(file_path):
-        audio_file = FSInputFile(file_path)
-        await query.message.answer_audio(audio_file)
-        os.remove(file_path)
-    else:
-        await query.message.answer("File has not been found on server.")
 
 # just for test ; will delete soon
 @router.message(F.text)
 async def text_handler(message: Message):
     doc = message.text
     await message.answer(f"Text: {doc}")
+
+# ----- helper methods here ------
+
+async def _check_url(url: str | None) -> str:
+    if url is None: raise Exception("Null url.")
+    args = url.split(maxsplit=1)
+    if len(args) < 2: raise Exception("Please enter a valid URL. Use /dlp <URL>")
+
+    return args[1]
 
 async def _get_audio(url) -> AudioFile:
     audio_file = await media_installer.download_audio(url)
@@ -174,3 +158,35 @@ async def _get_audio(url) -> AudioFile:
     if not file_path: raise Exception("Couldn't find the file on server.")
 
     return audio_file
+
+async def _track_from_audio(file: AudioFile) -> Track:
+    track = Track(
+        title=file.title,
+        artists=file.artist.split(", ")[0] if file.artist else None,
+        file_path=file.file_path
+    )
+
+    return track
+
+async def _set_album_cover(album: Album) -> str | None:
+    if album.title and album.artist:
+        album_cover = await audio_configurator.get_album_cover(album.title, album.artist)
+        return album_cover
+
+    return None
+
+async def _generate_caption_text(album: Album, track: Track) -> str:
+    caption_text = (
+        f"Album: {album.title or 'N/A'}\n"
+        f"Album Artist: {album.artist or 'N/A'}\n"
+        f"Year: {album.year or 'N/A'}\n"
+        f"Genre: {album.main_genre or 'N/A'}\n"
+        f"Total tracks: {album.total_tracks or 'N/A'}\n\n"
+
+        f"Track: {track.title or 'N/A'}\n"
+        f"Artists: {track.artists or 'N/A'}\n"
+        f"Disc number: {track.disc or 1}\n"
+        f"Track position: {track.position or 1}/{album.total_tracks or 1}\n"
+    )
+
+    return caption_text
