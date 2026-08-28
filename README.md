@@ -45,6 +45,10 @@ Result may look like:
 * Downloading entire playlists as albums.
 * Improved tag search accuracy.
 
+> [!WARNING]
+> **Not a finished product**
+> It still have some bugs. I'm working on it. Please wait for the release to appear.
+
 ## Installation
 You'll need [Docker](https://www.docker.com/) and telegram account for launching the application.
 
