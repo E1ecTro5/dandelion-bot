@@ -1,2 +1,7 @@
-aiogram
+aiogram>=3.0.0
+yt-dlp
 python-dotenv
+discogs-client
+aiohttp
+mutagen
+roman
