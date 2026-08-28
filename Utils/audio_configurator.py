@@ -96,7 +96,6 @@ def _apply_mp3_tags(file_path: str, track: Track, album: Album, cover_bytes: byt
 
     audio.save(file_path, v2_version=3)
 
-
 def _apply_flac_tags(file_path: str, track: Track, album: Album, cover_bytes: bytes | None) -> None:
     audio = FLAC(file_path)
     audio["title"] = track.title
@@ -176,24 +175,31 @@ def _search_for_track_match(artist: str | None, track_title: str | None):
     for a, t in queries:
         res = d.search(track=t, artist=a, type='master')
         if res:
-            first_match = res[0]
-            break
+            return res[0]
 
     # search in singles, digital releases
-    if not first_match:
-        for a, t in queries:
-            res = d.search(track=t, artist=a, type='release')
-            if res:
-                first_match = res[0]
-                break
+    releases = []
+    for a, t in queries:
+        res = d.search(track=t, artist=a, type='release')
+        if res:
+            releases.extend(list(res))
+            break
+
+    if releases:
+        # filer and sort by year (take the earliest version)
+        valid_releases = [r for r in releases if getattr(r, 'year', None)]
+        if valid_releases:
+            valid_releases.sort(key=lambda r: int(r.year))
+            return valid_releases[0]
+
+        # in case you can't get the year, take the first
+        return releases[0]
 
     # common search
-    if not first_match:
-        for a, t in queries:
-            res = d.search(track=t, artist=a)
-            if res:
-                first_match = res[0]
-                break
+    for a, t in queries:
+        res = d.search(track=t, artist=a)
+        if res:
+            return res[0]
 
     if not first_match:
         raise Exception(f"Nothing found in Discogs for: {artist} - {track_title}")
@@ -384,7 +390,7 @@ def _parse_position(position: str):
 
     # just a num
     clean_num = re.sub(r'\D', '', position)
-    return 1, clean_num or int(position)
+    return 1, int(clean_num) if clean_num else 1
 
 def _extract_artist_info(target_artists: list) -> tuple[list[str], list[tuple[str, str]]]:
     clean_names: list[str] = []
