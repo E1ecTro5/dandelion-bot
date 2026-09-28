@@ -25,13 +25,21 @@ def _download_file_sync(url: str) -> AudioFile:
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True) # metafiles
+        if 'entries' in info and info['entries']: info = info['entries'][0] # in case if we got playlist
         mp3_filename = ydl.prepare_filename(info) # getting filename after post-processing
         mp3_filename = mp3_filename.rsplit('.', 1)[0] + '.mp3'
+
+        raw_year = info.get('release_year') or info.get('release_date') or info.get('upload_date')
+        year = str(raw_year)[:4] if raw_year else None
 
         file = AudioFile(
             file_path = mp3_filename,
             title = info.get('title'),
-            artist = info.get('artist') or info.get('uploader') or info.get('channel')
+            artist = info.get('artist') or info.get('uploader') or info.get('channel') or "", # will at least return channel name, rather than ""
+
+            album = info.get('album') or None,
+            album_artist = info.get('album_artist') or None,
+            year = year if info.get('album') else None # ignore if album is None
         )
 
         return file
