@@ -65,7 +65,7 @@ the cloned repository folder alongside the `main.py` file. The structure should 
 TELEGRAM_API_ID=<your id>
 TELEGRAM_API_HASH=<your hash>
 
-YOUR_BOT_TOKEN=<your token>
+BOT_TOKEN=<your token>
 
 BOT_API_URL=http://telegram-bot-api:8081
 LOCAL_SERVER_URL=http://telegram-bot-api:8081
