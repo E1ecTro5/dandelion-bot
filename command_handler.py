@@ -31,8 +31,16 @@ async def dlp_handler(message: Message):
         status_msg = await message.answer("Downloading...")
         audio_file = await _get_audio(url)
 
+        await message.answer(f"Downloaded file:\n"
+                             f"Title: {audio_file.title}\n"
+                             f"Artists: {audio_file.artist}\n\n"
+                             f"Identifiers in file:\n"
+                             f"Album: {audio_file.album}\n"
+                             f"Album artist: {audio_file.album_artist}\n"
+                             f"Year: {audio_file.year}\n\n"
+                             f"Searching for tags...")
+
         file = await _track_from_audio(audio_file)
-        await message.answer(f"Downloaded: {file.title} by {file.artists}") # just to log
 
         # tags
         try: track, album = await audio_configurator.setup_tags(audio_file)
