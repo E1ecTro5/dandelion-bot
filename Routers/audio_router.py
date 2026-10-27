@@ -1,13 +1,13 @@
 import os
-from Utils import audio_configurator, media_installer
+from Utils import audio_configurator
 import uuid
 from aiogram import Router
 from aiogram.types import Message, CallbackQuery, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 
-from Models.file_model import AudioFile
 from Models.main_models import Album, Track
+from Utils.configuration_functions import _check_url, _get_audio, _track_from_audio, _set_album_cover, _generate_caption_text
 
 # create router to pass in the main.py
 router = Router()
@@ -138,53 +138,3 @@ async def process_confirm_callback(query: CallbackQuery, callback_data: ConfirmA
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
-
-# ----- helper methods here ------
-
-async def _check_url(url: str | None) -> str:
-    if url is None: raise Exception("Null url.")
-    args = url.split(maxsplit=1)
-    if len(args) < 2: raise Exception("Please enter a valid URL. Use /dlp <URL>")
-
-    return args[1]
-
-async def _get_audio(url) -> AudioFile:
-    audio_file = await media_installer.download_audio(url)
-    if not audio_file: raise Exception("Couldn't download the file.")
-
-    file_path = audio_file.file_path
-    if not file_path: raise Exception("Couldn't find the file on server.")
-
-    return audio_file
-
-async def _track_from_audio(file: AudioFile) -> Track:
-    track = Track(
-        title=file.title,
-        artists=file.artist.split(", ")[0] if file.artist else None,
-        file_path=file.file_path
-    )
-
-    return track
-
-async def _set_album_cover(album: Album) -> str | None:
-    if album.title and album.artist:
-        album_cover = await audio_configurator.get_album_cover(album.title, album.artist)
-        return album_cover
-
-    return None
-
-async def _generate_caption_text(album: Album, track: Track) -> str:
-    caption_text = (
-        f"Album: {album.title or 'N/A'}\n"
-        f"Album Artist: {album.artist or 'N/A'}\n"
-        f"Year: {album.year or 'N/A'}\n"
-        f"Genre: {album.main_genre or 'N/A'}\n"
-        f"Total tracks: {album.total_tracks or 'N/A'}\n\n"
-
-        f"Track: {track.title or 'N/A'}\n"
-        f"Artists: {track.artists or 'N/A'}\n"
-        f"Disc number: {track.disc or 1}\n"
-        f"Track position: {track.position or 1}/{album.total_tracks or 1}\n"
-    )
-
-    return caption_text
