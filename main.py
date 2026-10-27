@@ -1,12 +1,12 @@
 import asyncio
 import logging
 import os
-import command_handler
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
 from dotenv import load_dotenv
+from Routers import basic_router, audio_router
 
 load_dotenv() # detects the .env file
 
@@ -22,8 +22,8 @@ async def main():
     bot = Bot(token=BOT_TOKEN, session=session) # telegram bot
     dp = Dispatcher() # main manager for routing messages and commands (сообщения, команды)
 
-    # includes /start, /dlp and text echo for now
-    dp.include_router(command_handler.router) # connect router
+    dp.include_router(basic_router.router) # basic router ("/start" and "{text}")
+    dp.include_router(audio_router.router) # audio router ("/dlp")
 
     print("Starting the bot...")
 

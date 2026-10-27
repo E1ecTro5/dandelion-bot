@@ -1,7 +1,7 @@
 import os
 from Utils import audio_configurator, media_installer
 import uuid
-from aiogram import Router, F
+from aiogram import Router
 from aiogram.types import Message, CallbackQuery, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
@@ -18,10 +18,6 @@ PENDING_DOWNLOADS = {}
 class ConfirmAction(CallbackData, prefix="confirm_dl"):
     action: str # action type
     download_id: str
-
-@router.message(Command("start"))
-async def cmd_start(message: Message):
-    await message.answer("Welcome!")
 
 @router.message(Command("dlp"))
 async def dlp_handler(message: Message):
@@ -142,12 +138,6 @@ async def process_confirm_callback(query: CallbackQuery, callback_data: ConfirmA
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
-
-# just for test ; will delete soon
-@router.message(F.text)
-async def text_handler(message: Message):
-    doc = message.text
-    await message.answer(f"Text: {doc}")
 
 # ----- helper methods here ------
 
