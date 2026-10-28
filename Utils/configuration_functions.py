@@ -21,16 +21,6 @@ async def _get_audio(url) -> AudioFile:
 
     return audio_file
 
-async def _track_from_audio(file: AudioFile) -> Track:
-    """Accepts AudioFile and returns Track with title, artists and path. Still not full Track info..."""
-    track = Track(
-        title=file.title, # never will be null
-        artists=file.artist.split(", ")[0], # never will be null
-        file_path=file.file_path
-    )
-
-    return track
-
 async def _set_album_cover(album: Album) -> str | None:
     """Downloads the album cover and returns it"""
     if album.title and album.artist:

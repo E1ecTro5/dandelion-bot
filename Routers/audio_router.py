@@ -7,7 +7,8 @@ from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 
 from Models.main_models import Album, Track
-from Utils.configuration_functions import _check_url, _get_audio, _track_from_audio, _set_album_cover, _generate_caption_text
+from Utils.bot_functions import try_get_audio, identify_downloaded_audio, track_from_audio
+from Utils.configuration_functions import _set_album_cover, _generate_caption_text
 
 # create router to pass in the main.py
 router = Router()
@@ -21,28 +22,18 @@ class ConfirmAction(CallbackData, prefix="confirm_dl"):
 
 @router.message(Command("dlp"))
 async def dlp_handler(message: Message):
-    status_msg = None
+    audio_file = await try_get_audio(message) # get the audio file
+    await identify_downloaded_audio(message, audio_file) # parses AudioFile to Track
+    trackFile = await track_from_audio(audio_file) # Track() from AudioFile()
+
+    # get the tags and cover
     try:
-        url = await _check_url(message.text)
-        status_msg = await message.answer("Downloading...")
-        audio_file = await _get_audio(url)
-
-        await message.answer(f"Downloaded file:\n"
-                             f"Title: {audio_file.title}\n"
-                             f"Artists: {audio_file.artist}\n\n"
-                             f"Identifiers in file:\n"
-                             f"Album: {audio_file.album}\n"
-                             f"Album artist: {audio_file.album_artist}\n"
-                             f"Year: {audio_file.year}\n\n"
-                             f"Searching for tags...")
-
-        file = await _track_from_audio(audio_file)
-
         # tags
+        # make it try_get_tags
         try: track, album = await audio_configurator.setup_tags(audio_file)
         except Exception as e:
             await message.answer(f"Tag setup failed: {e}")
-            track = file
+            track = trackFile
             album = Album()
 
         # cover
@@ -96,7 +87,8 @@ async def dlp_handler(message: Message):
     except Exception as e:
         await message.answer(f"Error during download: {e}")
     finally:
-        if status_msg: await status_msg.delete()
+        pass
+        # if status_msg: await status_msg.delete()
 
 @router.callback_query(ConfirmAction.filter())
 async def process_confirm_callback(query: CallbackQuery, callback_data: ConfirmAction):
