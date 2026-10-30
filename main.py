@@ -22,8 +22,8 @@ async def main():
     bot = Bot(token=BOT_TOKEN, session=session) # telegram bot
     dp = Dispatcher() # main manager for routing messages and commands (сообщения, команды)
 
+    dp.include_router(audio_router.router) # audio router ("/dlp") ; MAKE IT FIRST?
     dp.include_router(basic_router.router) # basic router ("/start" and "{text}")
-    dp.include_router(audio_router.router) # audio router ("/dlp")
 
     print("Starting the bot...")
 
