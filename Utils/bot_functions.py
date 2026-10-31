@@ -1,8 +1,10 @@
 from aiogram.types import Message
 
 from Models.file_model import AudioFile
-from Models.main_models import Track
-from Utils.configuration_functions import _check_url, _get_audio
+from Models.main_models import Track, Album
+from Utils import audio_configurator
+from Utils.configuration_functions import _check_url, _get_audio, _set_album_cover
+
 
 async def try_get_audio(message: Message) -> tuple[AudioFile | None, Message | None]:
     """Accepts Message, parses it, checks the url, downloads the file and returns as AudioFile if available"""
@@ -35,3 +37,21 @@ async def track_from_audio(file: AudioFile) -> Track:
     )
 
     return track
+
+async def try_get_tags(message: Message, audio_file: AudioFile, track_file: Track):
+    try:
+        await message.answer(f"Searching for tags in Discogs base...")
+        track, album = await audio_configurator.setup_tags(audio_file)
+        return track, album
+    except Exception as e:
+        await message.answer(f"Tag setup failed: {e}")
+        return None, None
+
+async def try_get_album_cover(message: Message, album: Album):
+    try:
+        await message.answer(f"Downloading album cover...")
+        album_cover = await _set_album_cover(album)
+        return album_cover
+    except Exception as e:
+        await message.answer(f"Error while getting album cover: {e}")
+        return None

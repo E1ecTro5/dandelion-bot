@@ -7,8 +7,9 @@ from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 
 from Models.main_models import Album, Track
-from Utils.bot_functions import try_get_audio, identify_downloaded_audio, track_from_audio
-from Utils.configuration_functions import _set_album_cover, _generate_caption_text
+from Utils.bot_functions import try_get_audio, identify_downloaded_audio, track_from_audio, try_get_tags, \
+    try_get_album_cover
+from Utils.configuration_functions import _generate_caption_text
 
 # create router to pass in the main.py
 router = Router()
@@ -20,6 +21,26 @@ class ConfirmAction(CallbackData, prefix="confirm_dl"):
     action: str # action type
     download_id: str
 
+def generate_keyboard(download_id) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="Apply tags",
+                callback_data=ConfirmAction(action="apply", download_id=download_id).pack()
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="Skip",
+                callback_data=ConfirmAction(action="skip", download_id=download_id).pack()
+            ),
+            InlineKeyboardButton(
+                text="Cancel",
+                callback_data=ConfirmAction(action="cancel", download_id=download_id).pack()
+            )
+        ]
+    ])
+
 @router.message(Command("dlp"))
 async def dlp_handler(message: Message):
     audio_file, _ = await try_get_audio(message) # get the audio file
@@ -29,21 +50,11 @@ async def dlp_handler(message: Message):
 
     # get the tags and cover
     try:
-        # tags
-        # make it try_get_tags
-        try: track, album = await audio_configurator.setup_tags(audio_file)
-        except Exception as e:
-            await message.answer(f"Tag setup failed: {e}")
-            track = track_file
-            album = Album()
+        track, album = await try_get_tags(message, audio_file, track_file)
+        if track is None: return await message.answer("NONE TRACK FILE")
 
-        # cover
-        try: album_cover = await _set_album_cover(album)
-        except Exception as e:
-            await message.answer(f"Error while getting album cover: {e}")
-            album_cover = None
-
-        caption_text = await _generate_caption_text(album, track)
+        album_cover = await try_get_album_cover(message, album)
+        if album_cover is None: return await message.answer("NONE ALBUM COVER FILE")
 
         download_id = str(uuid.uuid4())[:8]
         PENDING_DOWNLOADS[download_id] = {
@@ -53,37 +64,9 @@ async def dlp_handler(message: Message):
             "cover_url": album_cover
         }
 
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="Apply tags",
-                    callback_data=ConfirmAction(action="apply", download_id=download_id).pack()
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="Skip",
-                    callback_data=ConfirmAction(action="skip", download_id=download_id).pack()
-                ),
-                InlineKeyboardButton(
-                    text="Cancel",
-                    callback_data=ConfirmAction(action="cancel", download_id=download_id).pack()
-                )
-            ]
-        ])
-
-        if album_cover:
-            try:
-                await message.answer_photo(
-                    photo=album_cover,
-                    caption=caption_text,
-                    reply_markup=keyboard,
-                )
-                return
-            except Exception:
-                pass  # if cover damaged / not found
-
-        await message.answer(caption_text, reply_markup=keyboard)
+        caption_text = await _generate_caption_text(album, track)
+        keyboard = generate_keyboard(download_id)
+        await message.answer_photo(photo=album_cover, caption=caption_text, reply_markup=keyboard)
 
     except Exception as e:
         await message.answer(f"Error during download: {e}")
