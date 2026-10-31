@@ -8,8 +8,7 @@ from aiogram.filters.callback_data import CallbackData
 
 from Models.main_models import Album, Track
 from Utils.bot_functions import try_get_audio, identify_downloaded_audio, track_from_audio, try_get_tags, \
-    try_get_album_cover, prepare_download_id
-from Utils.configuration_functions import _generate_caption_text
+    try_get_album_cover, prepare_download_id, generate_answer_card
 from Utils.download_manager import dm_instance
 
 # create router to pass in the main.py
@@ -18,26 +17,6 @@ router = Router()
 class ConfirmAction(CallbackData, prefix="confirm_dl"):
     action: str # action type
     download_id: str
-
-def generate_keyboard(download_id) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="Apply tags",
-                callback_data=ConfirmAction(action="apply", download_id=download_id).pack()
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="Skip",
-                callback_data=ConfirmAction(action="skip", download_id=download_id).pack()
-            ),
-            InlineKeyboardButton(
-                text="Cancel",
-                callback_data=ConfirmAction(action="cancel", download_id=download_id).pack()
-            )
-        ]
-    ])
 
 @router.message(Command("dlp"))
 async def dlp_handler(message: Message):
@@ -48,23 +27,20 @@ async def dlp_handler(message: Message):
 
     # get the tags and cover
     try:
-        track, album = await try_get_tags(message, audio_file, track_file)
-        if track is None: return await message.answer("NONE TRACK FILE")
+        track, album = await try_get_tags(message, audio_file, track_file) # name speaks for itself
+        if track is None: return await message.answer("NONE TRACK FILE") # just in case
 
-        album_cover = await try_get_album_cover(message, album)
-        if album_cover is None: return await message.answer("NONE ALBUM COVER FILE")
+        album_cover = await try_get_album_cover(message, album) # name speaks for itself
+        if album_cover is None: return await message.answer("NONE ALBUM COVER FILE") # just in case
 
+        # creates download_id in the memory ; need for multiple downloads
         download_id = await prepare_download_id(audio_file, track, album, album_cover)
 
-        caption_text = await _generate_caption_text(album, track)
-        keyboard = generate_keyboard(download_id)
-        await message.answer_photo(photo=album_cover, caption=caption_text, reply_markup=keyboard)
+        # card with audio details (with tags and cover) ; keyboard with answers
+        await generate_answer_card(message, track, album, album_cover, download_id)
 
     except Exception as e:
         await message.answer(f"Error during download: {e}")
-    finally:
-        pass
-        # if status_msg: await status_msg.delete()
 
 @router.callback_query(ConfirmAction.filter())
 async def process_confirm_callback(query: CallbackQuery, callback_data: ConfirmAction):

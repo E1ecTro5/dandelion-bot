@@ -28,20 +28,3 @@ async def _set_album_cover(album: Album) -> str | None:
         return album_cover
 
     return None
-
-async def _generate_caption_text(album: Album, track: Track) -> str:
-    """Prepare text for caption with detailed album and track info"""
-    caption_text = (
-        f"Album: {album.title or 'N/A'}\n"
-        f"Album Artist: {album.artist or 'N/A'}\n"
-        f"Year: {album.year or 'N/A'}\n"
-        f"Genre: {album.main_genre or 'N/A'}\n"
-        f"Total tracks: {album.total_tracks or 'N/A'}\n\n"
-
-        f"Track: {track.title or 'N/A'}\n"
-        f"Artists: {track.artists or 'N/A'}\n"
-        f"Disc number: {track.disc or 1}\n"
-        f"Track position: {track.position or 1}/{album.total_tracks or 1}\n"
-    )
-
-    return caption_text

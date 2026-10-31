@@ -1,9 +1,10 @@
 import uuid
 
-from aiogram.types import Message
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 from Models.file_model import AudioFile
 from Models.main_models import Track, Album
+from Routers.audio_router import ConfirmAction
 from Utils import audio_configurator
 from Utils.configuration_functions import _check_url, _get_audio, _set_album_cover
 from Utils.download_manager import dm_instance
@@ -71,3 +72,46 @@ async def prepare_download_id(audio_file: AudioFile, track: Track, album: Album,
     dm_instance.add(download_id, data) # add to DownloadManager instance
 
     return download_id # make sure to return the id back
+
+async def generate_caption_text(album: Album, track: Track) -> str:
+    """Prepare text for caption with detailed album and track info"""
+    caption_text = (
+        f"Album: {album.title or 'N/A'}\n"
+        f"Album Artist: {album.artist or 'N/A'}\n"
+        f"Year: {album.year or 'N/A'}\n"
+        f"Genre: {album.main_genre or 'N/A'}\n"
+        f"Total tracks: {album.total_tracks or 'N/A'}\n\n"
+
+        f"Track: {track.title or 'N/A'}\n"
+        f"Artists: {track.artists or 'N/A'}\n"
+        f"Disc number: {track.disc or 1}\n"
+        f"Track position: {track.position or 1}/{album.total_tracks or 1}\n"
+    )
+
+    return caption_text
+
+def _generate_keyboard(download_id) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="Apply tags",
+                callback_data=ConfirmAction(action="apply", download_id=download_id).pack()
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="Skip",
+                callback_data=ConfirmAction(action="skip", download_id=download_id).pack()
+            ),
+            InlineKeyboardButton(
+                text="Cancel",
+                callback_data=ConfirmAction(action="cancel", download_id=download_id).pack()
+            )
+        ]
+    ])
+
+async def generate_answer_card(message: Message, album: Album, track: Track, album_cover: str, download_id: str) -> None:
+    """Prepare text for caption with detailed album and track info and answers a user with a keyboard"""
+    caption_text = await generate_caption_text(album, track)
+    keyboard = _generate_keyboard(download_id)
+    await message.answer_photo(photo=album_cover, caption=caption_text, reply_markup=keyboard)
