@@ -33,7 +33,7 @@ async def dlp_handler(message: Message):
         download_id = await prepare_download_id(audio_file, track, album, album_cover)
 
         # card with audio details (with tags and cover) ; keyboard with answers
-        await generate_answer_card(message, track, album, album_cover, download_id)
+        await generate_answer_card(message, album, track, album_cover, download_id)
 
     except Exception as e:
         await message.answer(f"Error during download: {e}")
