@@ -1,10 +1,10 @@
 import os
 
+from Models.callbacks import ConfirmAction
 from Utils import audio_configurator
 from aiogram import Router
-from aiogram.types import Message, CallbackQuery, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, FSInputFile
 from aiogram.filters import Command
-from aiogram.filters.callback_data import CallbackData
 
 from Models.main_models import Album, Track
 from Utils.bot_functions import try_get_audio, identify_downloaded_audio, track_from_audio, try_get_tags, \
@@ -13,10 +13,6 @@ from Utils.download_manager import dm_instance
 
 # create router to pass in the main.py
 router = Router()
-
-class ConfirmAction(CallbackData, prefix="confirm_dl"):
-    action: str # action type
-    download_id: str
 
 @router.message(Command("dlp"))
 async def dlp_handler(message: Message):

@@ -4,7 +4,7 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 from Models.file_model import AudioFile
 from Models.main_models import Track, Album
-from Routers.audio_router import ConfirmAction
+from Models.callbacks import ConfirmAction
 from Utils import audio_configurator
 from Utils.configuration_functions import _check_url, _get_audio, _set_album_cover
 from Utils.download_manager import dm_instance
