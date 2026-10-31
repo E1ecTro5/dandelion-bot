@@ -1,6 +1,6 @@
 import os
+
 from Utils import audio_configurator
-import uuid
 from aiogram import Router
 from aiogram.types import Message, CallbackQuery, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
@@ -8,14 +8,12 @@ from aiogram.filters.callback_data import CallbackData
 
 from Models.main_models import Album, Track
 from Utils.bot_functions import try_get_audio, identify_downloaded_audio, track_from_audio, try_get_tags, \
-    try_get_album_cover
+    try_get_album_cover, prepare_download_id
 from Utils.configuration_functions import _generate_caption_text
+from Utils.download_manager import dm_instance
 
 # create router to pass in the main.py
 router = Router()
-
-# temp storage ; how about you just use Redis in future instead of this?
-PENDING_DOWNLOADS = {}
 
 class ConfirmAction(CallbackData, prefix="confirm_dl"):
     action: str # action type
@@ -56,13 +54,7 @@ async def dlp_handler(message: Message):
         album_cover = await try_get_album_cover(message, album)
         if album_cover is None: return await message.answer("NONE ALBUM COVER FILE")
 
-        download_id = str(uuid.uuid4())[:8]
-        PENDING_DOWNLOADS[download_id] = {
-            "file_path": audio_file.file_path,
-            "track": track,
-            "album": album,
-            "cover_url": album_cover
-        }
+        download_id = await prepare_download_id(audio_file, track, album, album_cover)
 
         caption_text = await _generate_caption_text(album, track)
         keyboard = generate_keyboard(download_id)
@@ -79,7 +71,7 @@ async def process_confirm_callback(query: CallbackQuery, callback_data: ConfirmA
     await query.answer()
 
     download_id = callback_data.download_id
-    data = PENDING_DOWNLOADS.pop(download_id, None)
+    data = dm_instance.get_and_pop(download_id)
 
     if not data:
         await query.message.answer("Download session is outdated or file has not been found.")

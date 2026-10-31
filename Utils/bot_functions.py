@@ -1,9 +1,12 @@
+import uuid
+
 from aiogram.types import Message
 
 from Models.file_model import AudioFile
 from Models.main_models import Track, Album
 from Utils import audio_configurator
 from Utils.configuration_functions import _check_url, _get_audio, _set_album_cover
+from Utils.download_manager import dm_instance
 
 
 async def try_get_audio(message: Message) -> tuple[AudioFile | None, Message | None]:
@@ -55,3 +58,16 @@ async def try_get_album_cover(message: Message, album: Album):
     except Exception as e:
         await message.answer(f"Error while getting album cover: {e}")
         return None
+
+async def prepare_download_id(audio_file: AudioFile, track: Track, album: Album, album_cover: str) -> str:
+    download_id = str(uuid.uuid4())[:8] # generate id
+    data = {
+        "file_path": audio_file.file_path,
+        "track": track,
+        "album": album,
+        "cover_url": album_cover
+    }
+
+    dm_instance.add(download_id, data) # add to DownloadManager instance
+
+    return download_id # make sure to return the id back
