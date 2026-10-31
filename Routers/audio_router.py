@@ -22,9 +22,10 @@ class ConfirmAction(CallbackData, prefix="confirm_dl"):
 
 @router.message(Command("dlp"))
 async def dlp_handler(message: Message):
-    audio_file = await try_get_audio(message) # get the audio file
+    audio_file, _ = await try_get_audio(message) # get the audio file
+    if audio_file is None: return await message.answer("NONE AUDIO FILE")
     await identify_downloaded_audio(message, audio_file) # parses AudioFile to Track
-    trackFile = await track_from_audio(audio_file) # Track() from AudioFile()
+    track_file = await track_from_audio(audio_file) # Track() from AudioFile()
 
     # get the tags and cover
     try:
@@ -33,7 +34,7 @@ async def dlp_handler(message: Message):
         try: track, album = await audio_configurator.setup_tags(audio_file)
         except Exception as e:
             await message.answer(f"Tag setup failed: {e}")
-            track = trackFile
+            track = track_file
             album = Album()
 
         # cover
