@@ -16,24 +16,25 @@ router = Router()
 
 @router.message(Command("dlp"))
 async def dlp_handler(message: Message):
-    audio_file, _ = await try_get_audio(message) # get the audio file
-    if audio_file is None: return await message.answer("NONE AUDIO FILE")
-    await identify_downloaded_audio(message, audio_file) # parses AudioFile to Track
+    audio_file, msg = await try_get_audio(message) # get the audio file
+    if audio_file is None: return await message.answer("NONE AUDIO FILE")   # delete this later
+    if msg is None: return await message.answer("NONE MESSAGE")             # delete this later
+    msg, msg_text = await identify_downloaded_audio(msg, audio_file) # parses AudioFile to Track
     track_file = await track_from_audio(audio_file) # Track() from AudioFile()
 
     # get the tags and cover
     try:
-        track, album = await try_get_tags(message, audio_file, track_file) # name speaks for itself
-        if track is None: return await message.answer("NONE TRACK FILE") # just in case
+        track, album = await try_get_tags(msg, msg_text, audio_file) # name speaks for itself
+        if track is None: return await msg.answer("NONE TRACK FILE") # just in case
 
-        album_cover = await try_get_album_cover(message, album) # name speaks for itself
-        if album_cover is None: return await message.answer("NONE ALBUM COVER FILE") # just in case
+        album_cover = await try_get_album_cover(msg, msg_text, album) # name speaks for itself
+        if album_cover is None: return await msg.answer("NONE ALBUM COVER FILE") # just in case
 
         # creates download_id in the memory ; need for multiple downloads
         download_id = await prepare_download_id(audio_file, track, album, album_cover)
 
         # card with audio details (with tags and cover) ; keyboard with answers
-        await generate_answer_card(message, album, track, album_cover, download_id)
+        await generate_answer_card(msg, album, track, album_cover, download_id)
 
     except Exception as e:
         await message.answer(f"Error during download: {e}")

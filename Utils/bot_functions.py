@@ -21,16 +21,20 @@ async def try_get_audio(message: Message) -> tuple[AudioFile | None, Message | N
         status_msg = await message.answer(f"Couldn't download the audio.")
         return None, status_msg
 
-async def identify_downloaded_audio(message: Message, audio_file: AudioFile):
+async def identify_downloaded_audio(message: Message, audio_file: AudioFile) -> tuple[Message, str]:
     """Accepts AudioFile, answers a message, which tells about file tags (title, artists, album if found, year if found)"""
-    await message.answer(f"Downloaded file:\n"
-                         f"Title: {audio_file.title}\n"
-                         f"Artists: {audio_file.artist}\n\n"
-                         f"Identifiers in file:\n"
-                         f"Album: {audio_file.album}\n"
-                         f"Album artist: {audio_file.album_artist}\n"
-                         f"Year: {audio_file.year}\n\n"
-                         f"Searching for tags...")
+    msg_text = (f"Downloaded file:\n"
+               f"Title: {audio_file.title}\n"
+               f"Artists: {audio_file.artist}\n\n"
+               f"Identifiers in file:\n"
+               f"Album: {audio_file.album}\n"
+               f"Album artist: {audio_file.album_artist}\n"
+               f"Year: {audio_file.year}\n\n"
+               f"Searching for tags...")
+
+    await message.edit_text(msg_text)
+
+    return message, msg_text
 
 async def track_from_audio(file: AudioFile) -> Track:
     """Accepts AudioFile and returns Track with title, artists and path. Still not full Track info..."""
@@ -42,18 +46,18 @@ async def track_from_audio(file: AudioFile) -> Track:
 
     return track
 
-async def try_get_tags(message: Message, audio_file: AudioFile, track_file: Track):
+async def try_get_tags(message: Message, msg_text: str, audio_file: AudioFile):
     try:
-        await message.answer(f"Searching for tags in Discogs base...")
+        await message.edit_text(f"{msg_text}\n\nSearching for tags in Discogs base...")
         track, album = await audio_configurator.setup_tags(audio_file)
         return track, album
     except Exception as e:
         await message.answer(f"Tag setup failed: {e}")
         return None, None
 
-async def try_get_album_cover(message: Message, album: Album):
+async def try_get_album_cover(message: Message, msg_text: str, album: Album):
     try:
-        await message.answer(f"Downloading album cover...")
+        await message.edit_text(f"{msg_text}\n\nDownloading album cover...")
         album_cover = await _set_album_cover(album)
         return album_cover
     except Exception as e:
@@ -114,4 +118,5 @@ async def generate_answer_card(message: Message, album: Album, track: Track, alb
     """Prepare text for caption with detailed album and track info and answers a user with a keyboard"""
     caption_text = await generate_caption_text(album, track)
     keyboard = _generate_keyboard(download_id)
+    await message.delete()
     await message.answer_photo(photo=album_cover, caption=caption_text, reply_markup=keyboard)
