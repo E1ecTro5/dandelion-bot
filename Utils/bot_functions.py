@@ -119,4 +119,5 @@ async def generate_answer_card(message: Message, album: Album, track: Track, alb
     caption_text = await generate_caption_text(album, track)
     keyboard = _generate_keyboard(download_id)
     await message.delete()
-    await message.answer_photo(photo=album_cover, caption=caption_text, reply_markup=keyboard)
+    if album_cover: await message.answer_photo(photo=album_cover, caption=caption_text, reply_markup=keyboard)
+    else: await message.answer(caption_text, reply_markup=keyboard)

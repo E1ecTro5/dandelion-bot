@@ -28,7 +28,7 @@ async def dlp_handler(message: Message):
         if track is None: return await msg.answer("NONE TRACK FILE") # just in case
 
         album_cover = await try_get_album_cover(msg, msg_text, album) # name speaks for itself
-        if album_cover is None: return await msg.answer("NONE ALBUM COVER FILE") # just in case
+        # if album_cover is None: return await msg.answer("NONE ALBUM COVER FILE") # just in case
 
         # creates download_id in the memory ; need for multiple downloads
         download_id = await prepare_download_id(audio_file, track, album, album_cover)
