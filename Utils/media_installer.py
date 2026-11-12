@@ -38,7 +38,6 @@ def _download_file_sync(url: str) -> AudioFile:
             artist = info.get('artist') or info.get('uploader') or info.get('channel') or "", # will at least return channel name, rather than ""
 
             album = info.get('album') or None,
-            album_artist = info.get('album_artist') or None,
             year = year if info.get('album') else None # ignore if album is None
         )
 

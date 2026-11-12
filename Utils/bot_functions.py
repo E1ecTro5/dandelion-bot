@@ -28,7 +28,6 @@ async def identify_downloaded_audio(message: Message, audio_file: AudioFile) -> 
                f"Artists: {audio_file.artist}\n\n"
                f"Identifiers in file:\n"
                f"Album: {audio_file.album}\n"
-               f"Album artist: {audio_file.album_artist}\n"
                f"Year: {audio_file.year}\n\n"
                f"Searching for tags...")
 
