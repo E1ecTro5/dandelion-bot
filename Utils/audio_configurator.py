@@ -159,25 +159,41 @@ async def apply_tags(file_path: str, track: Track, album: Album, cover_url: str 
     # file I/O in another thread
     await asyncio.to_thread(_write)
 
-def _search_for_track_match(artist: str | None, track_title: str | None):
+
+def _search_for_track_match(
+        artist: str | None,
+        track_title: str | None,
+        album: str | None = None,
+        year: int | str | None = None):
     if artist is None or track_title is None: raise Exception("Artist or Track Title is Null!")
 
     clean_artist = normalize_string(artist)
     clean_title = normalize_string(track_title)
-
-    first_match = None
+    clean_album = normalize_string(album) if album else None
 
     queries = [(artist, track_title)]
     if (clean_artist, clean_title) != (artist, track_title):
         queries.append((clean_artist, clean_title))
 
-    # search in master releases
+    # search with album and year
+    if album and year:
+        clean_queries_with_album = [(artist, track_title, album, year)]
+        if clean_album and clean_album != album:
+            clean_queries_with_album.append((clean_artist, clean_title, clean_album, year))
+
+        for a, t, alb, yr in clean_queries_with_album:
+            # В зависимости от библиотеки discogs_client параметры могут называться release_title или album
+            res = d.search(track=t, artist=a, release_title=alb, year=yr, type='release')
+            if res:
+                return res[0]
+
+    # search by master (default)
     for a, t in queries:
         res = d.search(track=t, artist=a, type='master')
         if res:
             return res[0]
 
-    # search in singles, digital releases
+    # search by release (fallback)
     releases = []
     for a, t in queries:
         res = d.search(track=t, artist=a, type='release')
@@ -186,28 +202,32 @@ def _search_for_track_match(artist: str | None, track_title: str | None):
             break
 
     if releases:
-        # filer and sort by year (take the earliest version)
         valid_releases = [r for r in releases if getattr(r, 'year', None)]
         if valid_releases:
             valid_releases.sort(key=lambda r: int(r.year))
             return valid_releases[0]
-
-        # in case you can't get the year, take the first
         return releases[0]
 
-    # common search
+    # search any
     for a, t in queries:
         res = d.search(track=t, artist=a)
         if res:
             return res[0]
 
-    if not first_match:
-        raise Exception(f"Nothing found in Discogs for: {artist} - {track_title}")
+    raise Exception(f"Nothing found in Discogs for: {artist} - {track_title} (Album: {album}, Year: {year})")
 
-    return first_match
 
-def _set_album_title(full_obj, master) -> str:
-    return getattr(full_obj, 'title', '') or getattr(master, 'title', '')
+def _set_album_title(full_obj, master, album_artist: str = None) -> str:
+    raw_title = getattr(full_obj, 'title', '') or getattr(master, 'title', '')
+    if not raw_title:
+        return ''
+
+    # remove artist name from album (? may need to be refactored/tested ?)
+    if album_artist:
+        pattern = re.escape(album_artist) + r'\s*[-–—]\s*'
+        raw_title = re.sub(pattern, '', raw_title, flags=re.IGNORECASE)
+
+    return raw_title.strip()
 
 def _set_album_artist(metadata, master) -> str:
     raw_artists = None
@@ -541,11 +561,11 @@ def _search_for_tags(file: AudioFile):
     track = Track(title=file.title, artists=file.artist, file_path=file.file_path)
     album = Album()
 
-    first_match = _search_for_track_match(track.artists, track.title)               # first match in search
+    first_match = _search_for_track_match(track.artists, track.title, file.album, file.year) # first match in search
     full_obj, master = _fetch_full_release(first_match)
 
-    album.title = _set_album_title(full_obj, master)                                # album title
     album.artist = _set_album_artist(full_obj, master)                              # album artist
+    album.title = _set_album_title(full_obj, master, album.artist)                  # album title
     album.main_genre = _set_album_genres(master, full_obj)                          # main genre if possible to obtain
     album.year = _set_album_year(full_obj, master)                                  # year
     album.total_tracks = _set_track_count(full_obj)                                 # tracks count
